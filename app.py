@@ -17,6 +17,36 @@ app.config['MYSQL_DB'] = 'emenu'
 mysql = MySQL(app)
 
 
+@app.route('/data', methods=['GET'])
+def get_data():
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT * FROM data")
+    row_headers = [x[0] for x in cur.description]
+    details = cur.fetchall()
+    json_data = []
+    for detail in details:
+        json_data.append(dict(zip(row_headers, detail)))
+    return jsonify(json_data)
+
+
+@app.route('/data', methods=['POST'])
+def post_data():
+    mealDetails = request.get_json()
+    _orderId = mealDetails['order_id']
+    _name = mealDetails['name']
+    _type = mealDetails['type']
+    _description = mealDetails['description']
+    _price = mealDetails['price']
+    _phone_number = mealDetails['phone_number']
+    cur7 = mysql.connection.cursor()
+    cur7.execute(
+        "INSERT INTO data(order_id, name, type, description, price, phone_number) VALUES(%s, %s, %s, %s, %s, %s)",
+        (_orderId, _name, _type, _description, _price, _phone_number))
+    mysql.connection.commit()
+    cur7.close()
+    return 'Succeess'
+
+
 @app.route('/restaurants', methods=['GET'])
 def get_restaurants():
     cur = mysql.connection.cursor()
@@ -209,7 +239,7 @@ def get_orders_id(id):
 def get_clientorders():
     cur5 = mysql.connection.cursor()
     cur5.execute(
-        "SELECT clientorders.*,neworders.quantity AS quantity, neworders.meal_name AS meal_name, neworders.meal_type AS meal_type, neworders.meal_price AS meal_price, users.phone_number AS phone_number, users.name AS user_name, users.lastname AS user_lastname FROM clientorders INNER JOIN users ON clientorders.phone_number = users.phone_number INNER JOIN (SELECT orders.* , meal.name AS meal_name, meal.type AS meal_type, meal.description AS meal_description, meal.prep_time AS meal_prep_time, meal.price AS meal_price FROM orders INNER JOIN meal ON orders.meal_id = meal.id) AS neworders ON clientorders.order_id = neworders.id ")
+        "SELECT clientorders.*,neworders.table_number AS table_number, neworders.meal_description AS meal_description, neworders.quantity AS quantity, neworders.meal_name AS meal_name, neworders.meal_type AS meal_type, neworders.meal_price AS meal_price, users.phone_number AS phone_number, users.name AS user_name, users.lastname AS user_lastname FROM clientorders INNER JOIN users ON clientorders.phone_number = users.phone_number INNER JOIN (SELECT orders.* , meal.name AS meal_name, meal.type AS meal_type, meal.description AS meal_description, meal.prep_time AS meal_prep_time, meal.price AS meal_price FROM orders INNER JOIN meal ON orders.meal_id = meal.id) AS neworders ON clientorders.order_id = neworders.id ")
     row_headers = [x[0] for x in cur5.description]
     details = cur5.fetchall()
     json_data = []
@@ -473,6 +503,54 @@ def email():
             server.login(sender_email, password)
             server.sendmail(sender_email, email, message.as_string())
     return "Success"
+
+
+@app.route("/top", methods=['GET'])
+def get_toppicks():
+    cur = mysql.connection.cursor()
+    cur1 = mysql.connection.cursor()
+    _phone_number = request.args.get('phone_number')
+    cur1.execute("SELECT name FROM `data` WHERE phone_number = %s GROUP BY name ORDER BY COUNT(*) DESC LIMIT 3", [_phone_number])
+    result_names = cur1.fetchall()
+    names = list(sum(result_names, ()))
+    nr1_name = names[0]
+    nr2_name = names[1]
+    nr3_name = names[2]
+    cur.execute("SELECT type FROM `data` WHERE phone_number = %s GROUP BY name ORDER BY COUNT(*) DESC LIMIT 3", [_phone_number])
+    result_types = cur.fetchall()
+    types = list(sum(result_types, ()))
+    nr1_type = types[0]
+    nr2_type = types[1]
+    nr3_type = types[2]
+
+    myList1 = ['rank', 'id', 'name', 'description', 'price']
+    myList2 = ['rank', 'id', 'name', 'description', 'price']
+    myList3 = ['rank', 'id', 'name', 'description', 'price']
+    rank = []
+
+    # Top 1
+    cur2 = mysql.connection.cursor()
+    cur2.execute("SELECT 1,id,name,description,price FROM meal WHERE name != %s AND name != %s AND name != %s AND type = %s ORDER BY RAND() LIMIT 1", (nr1_name, nr2_name, nr3_name, nr1_type))
+    result_one = cur2.fetchall()
+    for i in result_one:
+        rank.append(dict(zip(myList1, i)))
+
+    # Top 2
+    cur3 = mysql.connection.cursor()
+    cur3.execute("SELECT 2,id,name,description,price FROM meal WHERE name != %s AND name != %s AND name != %s AND type = %s ORDER BY RAND() LIMIT 1", (nr1_name, nr2_name, nr3_name, nr2_type))
+    result_two = cur3.fetchall()
+    for i in result_two:
+        rank.append(dict(zip(myList2, i)))
+
+    # Top 3
+    cur3 = mysql.connection.cursor()
+    cur3.execute("SELECT 3,id,name,description,price FROM meal WHERE name != %s AND name != %s AND name != %s  AND type = %s ORDER BY RAND() LIMIT 1", (nr1_name, nr2_name, nr3_name, nr3_type))
+    result_three = cur3.fetchall()
+    for i in result_three:
+        rank.append(dict(zip(myList3, i)))
+
+
+    return jsonify(rank)
 
 
 if __name__ == '__main__':
